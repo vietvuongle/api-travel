@@ -11,6 +11,8 @@ const Booking = require('./models/Booking')
 const multer = require('multer')
 const fs = require('fs')
 const { log } = require('console')
+const { resolve } = require('path')
+const { rejects } = require('assert')
 
 require('dotenv').config()
 const app = express()
@@ -27,6 +29,15 @@ app.use(cors({
 }))
 
 mongoose.connect(process.env.MONGO_URL)
+
+function getUserDataFromReq(req) {
+    return new Promise((resolve, rejects) => {
+        jwt.verify(req.cookies.token, jwtSecret, {}, async (err, userData) => {
+            if(err) throw err
+            resolve(userData)
+        })
+    })
+}
 
 app.get('/test', (req, res) => {
     res.json('test ok')
@@ -170,19 +181,45 @@ app.put('/places', async (req, res) => {
     })
 })
 
+app.delete('/places/:id', async (req, res) => {
+    const { token } = req.cookies;
+    const { id } = req.params;
+    console.log(id);
+    
+
+    // Xác thực token
+    jwt.verify(token, jwtSecret, {}, async (err, userData) => {
+        if (err) return res.status(401).json({ error: 'Chưa xác thực' });
+            await Place.deleteOne({_id: id});
+
+            res.json('ok')
+       
+
+    });
+});
+
+
 app.get('/places',async (req, res) => {
     res.json(await Place.find())
 })
 
-app.post('/bookings', (req, res) => {
+app.post('/bookings', async (req, res) => {
+    const userData = await getUserDataFromReq(req)
     const {place, checkIn, numberOfGuests, name, phone, price} = req.body
     Booking.create({
-        place, checkIn, numberOfGuests, name, phone, price
+        place, checkIn, numberOfGuests, name, phone, price, user:userData.id
     }).then((doc) => {
         res.json(doc)
     }).catch(err => {
         throw err
     })
+})
+
+
+
+app.get('/bookings', async (req, res) => {
+    const userData = await getUserDataFromReq(req)
+    res.json(await Booking.find({user:userData.id}).populate('place'))
 })
 
 app.listen(4000)
